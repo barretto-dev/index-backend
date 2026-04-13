@@ -9,7 +9,7 @@ function startSibr() {
 
   sibrProcess = spawn(
     "./SIBR_viewers/install/bin/SIBR_gaussianViewer_app",
-    ["-m", "/development/gaussian-splatting/output/93b9bc89-1", "--fullscreen"],
+    ["-m", "/development/gaussian-splatting/output/27852d70-0", "--fullscreen"],
     {
       cwd: "/development/gaussian-splatting/",
       env: { ...process.env},
