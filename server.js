@@ -3,63 +3,73 @@ const http = require("http");
 const WebSocket = require("ws");
 const pty = require("node-pty");
 const cors = require("cors");
+const url = require("url");
 
 const sibrRoutes = require("./routes/sibrRoutes");
+const imageRoutes = require("./routes/imageRoutes");
+const convertRoutes = require("./routes/convertRoutes");
+const convertController = require("./controllers/convertController");
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
 
 app.use(cors());
 app.use(express.json());
 
-// 👉 rotas separadas
 app.use("/sibr", sibrRoutes);
+app.use("/images", imageRoutes);
+app.use("/convert", convertRoutes);
 
-// =============================
-// 💻 Terminal WebSocket
-// =============================
-wss.on("connection", (ws) => {
-  console.log("Cliente conectado ao terminal");
+const wss = new WebSocket.Server({ noServer: true });
 
-  const shell = process.env.SHELL || "/bin/bash";
+server.on("upgrade", (request, socket, head) => {
+  const pathname = url.parse(request.url).pathname;
 
-  const ptyProcess = pty.spawn(shell, [], {
-    name: "xterm-color",
-    cols: 80,
-    rows: 24,
-    cwd: process.cwd(),
-    env: process.env,
-  });
+  if (pathname === "/terminal") {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      const shell = process.env.SHELL || "/bin/bash";
 
-  ptyProcess.onData((data) => {
-    ws.send(data);
-  });
+      const ptyProcess = pty.spawn(shell, [], {
+        name: "xterm-color",
+        cols: 80,
+        rows: 24,
+        cwd: process.cwd(),
+        env: process.env,
+      });
 
-  ws.on("message", (msg) => {
-    try {
-      const parsed = JSON.parse(msg.toString());
+      ptyProcess.onData((data) => {
+        ws.send(data);
+      });
 
-      if (parsed.type === "input") {
-        ptyProcess.write(parsed.data);
-      }
+      ws.on("message", (msg) => {
+        try {
+          const parsed = JSON.parse(msg.toString());
 
-      if (parsed.type === "resize") {
-        ptyProcess.resize(parsed.cols, parsed.rows);
-      }
-    } catch (err) {
-      console.error("Erro WS:", err.message);
-    }
-  });
+          if (parsed.type === "input") {
+            ptyProcess.write(parsed.data);
+          }
 
-  ws.on("close", () => {
-    ptyProcess.kill();
-  });
+          if (parsed.type === "resize") {
+            ptyProcess.resize(parsed.cols, parsed.rows);
+          }
+        } catch (err) {
+          console.error("Erro WS terminal:", err.message);
+        }
+      });
+
+      ws.on("close", () => {
+        ptyProcess.kill();
+      });
+    });
+  } else if (pathname === "/convert-stream") {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      convertController.registerConvertSocket(ws);
+    });
+  } else {
+    socket.destroy();
+  }
 });
 
-// =============================
-// 🚀 Start
-// =============================
 server.listen(3001, "0.0.0.0", () => {
   console.log("Servidor rodando em http://0.0.0.0:3001");
 });
