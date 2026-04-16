@@ -2,14 +2,14 @@ const { spawn } = require("child_process");
 
 let sibrProcess = null;
 
-function startSibr() {
+function startSibr(folderName) {
   if (sibrProcess) {
     return "SIBR já está rodando";
   }
 
   sibrProcess = spawn(
     "./SIBR_viewers/install/bin/SIBR_gaussianViewer_app",
-    ["-m", "/development/gaussian-splatting/output/27852d70-0", "--fullscreen"],
+    ["-m", "/development/gaussian-splatting/output/"+folderName, "--fullscreen"],
     {
       cwd: "/development/gaussian-splatting/",
       env: { ...process.env},

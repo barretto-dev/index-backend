@@ -2,7 +2,8 @@ const sibrService = require("../services/sibrService");
 
 function start(req, res) {
   try {
-    const result = sibrService.startSibr();
+    const { folderName } = req.body;
+    const result = sibrService.startSibr(folderName);
     res.status(200).send(result);
   } catch (err) {
     console.error(err);
