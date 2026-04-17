@@ -20,7 +20,8 @@ function downloadImagesZip(req, res) {
 
 async function downloadAndSave(req, res) {
     try {
-      const url = "http://localhost:3001/images/download";
+      const url = "http://192.168.0.20:8080/api/camera/download-latest"
+      //const url = "http://localhost:3001/images/download";
       const zipPath = "/development/images.zip";
       const extractPath = "/development/frames/input";
   
