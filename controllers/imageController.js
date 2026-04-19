@@ -6,6 +6,9 @@ const unzipper = require("unzipper");
 
 const service = require("../services/imageService");
 
+let clients = [];
+let prepare_frames_running = false;
+
 function downloadImagesZip(req, res) {
   try {
     service.streamImagesZip(res);
@@ -38,32 +41,44 @@ async function downloadAndSave(req, res) {
   }
 
 async function prepareFrames(req, res) {
-  try {
-    const result = await service.runColmap();
 
-    if (!result.success) {
-      return res.status(500).json({
-        message: "Comando finalizado com erro",
-        ...result,
+  if (prepare_frames_running) 
+    return res.status(400).json({message: "Frames já estão sendo preparados",});
+
+  prepare_frames_running = true
+
+  try{
+    const result = await service.runColmap((output) => {
+      clients.forEach((ws) => {
+        if (ws.readyState === 1) 
+          ws.send(output);
       });
-    }
-
-    return res.status(200).json({
-      message: "Comando executado com sucesso",
-      ...result,
     });
+
+    prepare_frames_running = false;
+
+    if (!result.success) 
+      return res.status(500).json({message: "Processo finalizado com erro"});
+    
+    return res.status(200).json({message: "Processo executado com sucesso"});
+
   } catch (err) {
     console.error("Erro ao executar convert.py:", err);
-
-    return res.status(500).json({
-      message: "Erro interno ao executar convert.py",
-      error: err.message,
-    });
+    return res.status(500).json({message: "Erro interno ao executar convert.py"});
   }
+}
+
+function registerSocket(ws) {
+  clients.push(ws);
+
+  ws.on("close", () => {
+    clients = clients.filter((client) => client !== ws);
+  });
 }
 
 module.exports = {
   downloadImagesZip,
   downloadAndSave,
   prepareFrames,
+  registerSocket,
 };

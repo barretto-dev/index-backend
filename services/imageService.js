@@ -6,7 +6,7 @@ const path = require("path");
 const archiver = require("archiver");
 const { spawn } = require("child_process");
 
-const IMAGES_DIR = "/development/camera_data/images2";
+const IMAGES_DIR = "/development/camera_data/images";
 const FRAMES_DIR = "/development/frames/";
 
 function streamImagesZip(res) {
@@ -105,33 +105,43 @@ async function downloadAndSave(apiUrl, zipPath, extractPath){
       });
   }
 
-function runColmap() {
+function runColmap(onOutput) {
   return new Promise((resolve, reject) => {
-    const imgProcess = spawn(
+    const child = spawn(
       "python3",
       ["convert.py", "-s", FRAMES_DIR],
       {
         cwd: "/development/gaussian-splatting/",
-        env: {...process.env},
+        env: { ...process.env },
       }
     );
 
     let stdout = "";
     let stderr = "";
 
-    imgProcess.stdout.on("data", (data) => {
-      stdout += data.toString();
+    onOutput?.("$ cd /development/gaussian-splatting/\n");
+    onOutput?.(`$ python3 convert.py -s ${FRAMES_DIR}\n\n`);
+
+    child.stdout.on("data", (data) => {
+      const text = data.toString();
+      stdout += text;
+      onOutput?.(text);
     });
 
-    imgProcess.stderr.on("data", (data) => {
-      stderr += data.toString();
+    child.stderr.on("data", (data) => {
+      const text = data.toString();
+      stderr += text;
+      onOutput?.(text);
     });
 
-    imgProcess.on("error", (err) => {
+    child.on("error", (err) => {
+      onOutput?.(`\n[erro ao iniciar processo: ${err.message}]\n`);
       reject(err);
     });
 
-    imgProcess.on("close", (code) => {
+    child.on("close", (code) => {
+      onOutput?.(`\n[processo finalizado com código ${code}]\n`);
+
       resolve({
         success: code === 0,
         exitCode: code,
