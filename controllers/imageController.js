@@ -20,49 +20,20 @@ function downloadImagesZip(req, res) {
 
 async function downloadAndSave(req, res) {
     try {
-      const url = "http://192.168.0.20:8080/api/camera/download-latest"
-      //const url = "http://localhost:3001/images/download";
+      //const apiUrl = "http://192.168.0.20:8080/api/camera/download-latest"
+      const apiUrl = "http://localhost:3001/images/download";
       const zipPath = "/development/images.zip";
       const extractPath = "/development/frames/input";
-  
-      // cria pasta de extração se não existir
-      fs.mkdirSync(extractPath, { recursive: true });
-  
-      const response = await axios({
-        method: "GET",
-        url,
-        responseType: "stream",
-      });
-  
-      const writer = fs.createWriteStream(zipPath);
-      response.data.pipe(writer);
-  
-      writer.on("finish", async () => {
-        try {
-          await fs
-            .createReadStream(zipPath)
-            .pipe(unzipper.Extract({ path: extractPath }))
-            .promise();
-  
-          console.log(`ZIP salvo em: ${zipPath}`);
-          console.log(`Arquivos extraídos em: ${extractPath}`);
-          
-          fs.unlinkSync(zipPath);
 
-          res.send(`Arquivo salvo em ${zipPath} e extraído em ${extractPath}`);
-        } catch (err) {
-          console.error("Erro ao extrair ZIP:", err);
-          res.status(500).send("ZIP baixado, mas houve erro ao extrair");
-        }
-      });
-  
-      writer.on("error", (err) => {
-        console.error("Erro ao salvar ZIP:", err);
-        res.status(500).send("Erro ao salvar arquivo ZIP");
-      });
+      const result = await service.downloadAndSave(apiUrl, zipPath, extractPath);
+
+      res.status(200).json({
+        message: "Download e extração de frames concluídos com sucesso",
+      })
+
     } catch (err) {
-      console.error("Erro no download:", err);
-      res.status(500).send("Erro no download do ZIP");
+      console.log(err.message)
+      res.status(500).json({ message: err.message })
     }
   }
 
