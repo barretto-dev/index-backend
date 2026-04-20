@@ -3,8 +3,6 @@ const fs = require("fs");
 const fsp = require('fs').promises;
 const path = require("path");
 const unzipper = require("unzipper");
-
-
 const service = require("../services/imageService");
 
 const FRAMES_DIR = "/development/frames";
@@ -26,8 +24,8 @@ function downloadImagesZip(req, res) {
 
 async function downloadAndSave(req, res) {
     try {
-      //const apiUrl = "http://192.168.0.20:8080/api/camera/download-latest"
-      const apiUrl = "http://localhost:3001/images/download";
+      const apiUrl = "http://192.168.0.20:8080/api/camera/download-latest"
+      //const apiUrl = "http://localhost:3001/images/download";
       const zipPath = "/development/images.zip";
       const extractPath = "/development/frames/input";
 
@@ -62,10 +60,7 @@ async function prepareFrames(req, res) {
 
   try{
     const result = await service.runColmap((output) => {
-      clients.forEach((ws) => {
-        if (ws.readyState === 1) 
-          ws.send(output);
-      });
+      broadcast(output)
     });
 
     prepare_frames_running = false;
@@ -77,9 +72,26 @@ async function prepareFrames(req, res) {
 
   } catch (err) {
     console.error("Erro ao executar convert.py:", err);
-    return res.status(500).json({message: "Erro interno ao executar convert.py"});
+    broadcast(`\n[erro interno: ${err.message}]\n`);
+
+    return res.status(500).json({
+      message: "Erro interno ao executar convert.py",
+      error: err.message,
+    });
   }
 }
+
+function stopPrepareFrames(req, res) {
+  const result = service.stopColmap();
+
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+
+  broadcast("\n[solicitação de parada enviada]\n");
+  return res.status(200).json(result);
+}
+
 
 //Verificar se existem frames para serem treinados
 async function framesExists(input_dir){
@@ -137,9 +149,18 @@ function registerSocket(ws) {
   });
 }
 
+function broadcast(message) {
+  clients.forEach((ws) => {
+    if (ws.readyState === 1) {
+      ws.send(message);
+    }
+  });
+}
+
 module.exports = {
   downloadImagesZip,
   downloadAndSave,
   prepareFrames,
+  stopPrepareFrames,
   registerSocket,
 };

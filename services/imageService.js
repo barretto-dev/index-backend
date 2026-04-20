@@ -8,6 +8,7 @@ const { spawn } = require("child_process");
 
 const IMAGES_DIR = "/development/camera_data/images";
 const FRAMES_DIR = "/development/frames/";
+let COLMAP_PROCESS = null;
 
 function streamImagesZip(res) {
   if (!fs.existsSync(IMAGES_DIR)) {
@@ -107,6 +108,11 @@ async function downloadAndSave(apiUrl, zipPath, extractPath){
 
 function runColmap(onOutput) {
   return new Promise((resolve, reject) => {
+
+    if (COLMAP_PROCESS) {
+      return reject(new Error("Já existe um processo runColmap em execução"));
+    }
+
     const child = spawn(
       "python3",
       ["convert.py", "-s", FRAMES_DIR],
@@ -115,6 +121,8 @@ function runColmap(onOutput) {
         env: { ...process.env },
       }
     );
+
+    COLMAP_PROCESS = child
 
     let stdout = "";
     let stderr = "";
@@ -135,16 +143,28 @@ function runColmap(onOutput) {
     });
 
     child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      COLMAP_PROCESS = null;
+
       onOutput?.(`\n[erro ao iniciar processo: ${err.message}]\n`);
       reject(err);
     });
 
     child.on("close", (code) => {
-      onOutput?.(`\n[processo finalizado com código ${code}]\n`);
+      if (settled) return;
+      settled = true;
+      COLMAP_PROCESS = null;
 
+      if (signal)
+        onOutput?.(`\n[processo encerrado por sinal ${signal}]\n`);
+      else
+        onOutput?.(`\n[processo finalizado com código ${code}]\n`);
+      
       resolve({
         success: code === 0,
         exitCode: code,
+        signal: signal || null,
         stdout,
         stderr,
       });
@@ -152,8 +172,34 @@ function runColmap(onOutput) {
   });
 }
 
+function stopColmap() {
+
+  if (!COLMAP_PROCESS) 
+    return {success: false, message: "Não há processo runColmap em execução"};
+
+  const proc = COLMAP_PROCESS;
+
+  try {
+    proc.kill("SIGTERM");
+
+    setTimeout(() => {
+      if (COLMAP_PROCESS === proc) {
+        try {
+          proc.kill("SIGKILL");
+        } catch (err) {
+          console.error("Erro ao forçar parada do runColmap:", err.message);
+        }
+      }
+    }, 2000);
+
+    return { success: true, message: "Comando de parada enviado"}
+  } catch (err) {
+    return { success: false, message: `Erro ao encerrar processo: ${err.message}`}
+  }
+}
 module.exports = {
   streamImagesZip,
   downloadAndSave,
   runColmap,
+  stopColmap,
 };
