@@ -1,10 +1,13 @@
 const axios = require("axios");
 const fs = require("fs");
+const fsp = require('fs').promises;
 const path = require("path");
 const unzipper = require("unzipper");
 
 
 const service = require("../services/imageService");
+
+const FRAMES_DIR = "/development/frames";
 
 let clients = [];
 let prepare_frames_running = false;
@@ -45,6 +48,16 @@ async function prepareFrames(req, res) {
   if (prepare_frames_running) 
     return res.status(400).json({message: "Frames já estão sendo preparados",});
 
+  //Verifica se frames existem
+  let msg = await framesExists(FRAMES_DIR+"/input")
+  if(msg != null)
+    return res.status(400).json({message: msg});
+  
+  //Limpar pastas e arquivos do ultimo preparo
+  msg = await clearBeforePreparation(FRAMES_DIR)
+  if(msg != null)
+      return res.status(400).json({message: msg});
+
   prepare_frames_running = true
 
   try{
@@ -66,6 +79,54 @@ async function prepareFrames(req, res) {
     console.error("Erro ao executar convert.py:", err);
     return res.status(500).json({message: "Erro interno ao executar convert.py"});
   }
+}
+
+//Verificar se existem frames para serem treinados
+async function framesExists(input_dir){
+  try {
+    await fsp.access(input_dir);
+    const files = await fsp.readdir(input_dir);
+    const images = files.filter((f) =>/\.(jpg|jpeg|png)$/i.test(f));
+
+    if (images.length === 0)
+      return "Frames não encontrados, tenter recebe-los novamente "
+
+  } catch (error) {
+      if (error.code === "ENOENT") 
+        return "Diretorio de frames não encontrado, tenter receber os frames novamente"
+      else {
+        console.log(error)
+        return "Não foi possivel verificar ser frames existem"
+      }
+  }
+  return null
+}
+
+async function clearBeforePreparation(frames_dir){
+  //Apagar pastas do ultimo preparo de frames
+  try {
+      await fsp.rm(frames_dir+"/distorted", { recursive: true, force: true })
+      await fsp.rm(frames_dir+"/images", { recursive: true, force: true })
+      await fsp.rm(frames_dir+"/sparse", { recursive: true, force: true })
+      await fsp.rm(frames_dir+"/stereo", { recursive: true, force: true })
+  } catch (error) {
+    console.log(error)
+    return "Error ao limpar pastas de preparo de frames"
+  }
+
+   //Apagar arquivos do ultimo preparo de frames
+  try {
+    await fsp.unlink(frames_dir+"/run-colmap-geometric.sh");
+    await fsp.unlink(frames_dir+"/run-colmap-photometric.sh");
+  } catch (error) {
+     if (error.code === "ENOENT") {
+      //arquivo não existe, o que está ok
+      return null
+    }else
+      return res.status(500).json({message: "Error ao limpar aquivos .sh de preparo de frames "});
+  }
+  return null
+
 }
 
 function registerSocket(ws) {
