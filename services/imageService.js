@@ -126,6 +126,7 @@ function runColmap(onOutput) {
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
 
     onOutput?.("$ cd /development/gaussian-splatting/\n");
     onOutput?.(`$ python3 convert.py -s ${FRAMES_DIR}\n\n`);
@@ -151,7 +152,7 @@ function runColmap(onOutput) {
       reject(err);
     });
 
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       if (settled) return;
       settled = true;
       COLMAP_PROCESS = null;

@@ -41,7 +41,7 @@ async function downloadAndSave(req, res) {
     }
   }
 
-async function prepareFrames(req, res) {
+async function startPrepareFrames(req, res) {
 
   if (prepare_frames_running) 
     return res.status(400).json({message: "Frames já estão sendo preparados",});
@@ -54,15 +54,12 @@ async function prepareFrames(req, res) {
   //Limpar pastas e arquivos do ultimo preparo
   msg = await clearBeforePreparation(FRAMES_DIR)
   if(msg != null)
-      return res.status(400).json({message: msg});
+    return res.status(400).json({message: msg});
 
   prepare_frames_running = true
 
   try{
-    const result = await service.runColmap((output) => {
-      broadcast(output)
-    });
-
+    const result = await service.runColmap((output) => {broadcast(output)});
     prepare_frames_running = false;
 
     if (!result.success) 
@@ -84,9 +81,8 @@ async function prepareFrames(req, res) {
 function stopPrepareFrames(req, res) {
   const result = service.stopColmap();
 
-  if (!result.success) {
+  if (!result.success) 
     return res.status(400).json(result);
-  }
 
   broadcast("\n[solicitação de parada enviada]\n");
   return res.status(200).json(result);
@@ -160,7 +156,7 @@ function broadcast(message) {
 module.exports = {
   downloadImagesZip,
   downloadAndSave,
-  prepareFrames,
+  startPrepareFrames,
   stopPrepareFrames,
   registerSocket,
 };

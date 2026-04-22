@@ -32,7 +32,7 @@ server.on("upgrade", (request, socket, head) => {
     wss.handleUpgrade(request, socket, head, (ws) => {
       convertController.registerConvertSocket(ws);
     });
-  } else if (pathname === "/colmap-stream") {
+  } else if (pathname === "/prepare-frames-stream") {
       wss.handleUpgrade(request, socket, head, (ws) => {
         imageController.registerSocket(ws);
       });
