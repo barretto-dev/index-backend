@@ -7,10 +7,11 @@ const url = require("url");
 
 const sibrRoutes = require("./routes/sibrRoutes");
 const imageRoutes = require("./routes/imageRoutes");
-const imageController = require("./controllers/imageController")
-const convertRoutes = require("./routes/convertRoutes");
-const convertController = require("./controllers/convertController");
+const gaussianRoutes = require("./routes/gaussianRoutes");
 const outputRoutes = require("./routes/outputRoutes");
+
+const imageController = require("./controllers/imageController")
+const gaussianController = require("./controllers/gaussianController");
 
 const app = express();
 const server = http.createServer(app);
@@ -20,7 +21,7 @@ app.use(express.json());
 
 app.use("/sibr", sibrRoutes);
 app.use("/images", imageRoutes);
-app.use("/convert", convertRoutes);
+app.use("/gaussian", gaussianRoutes);
 app.use("/output", outputRoutes);
 
 const wss = new WebSocket.Server({ noServer: true });
@@ -28,9 +29,9 @@ const wss = new WebSocket.Server({ noServer: true });
 server.on("upgrade", (request, socket, head) => {
   const pathname = url.parse(request.url).pathname;
   
-  if (pathname === "/convert-stream") {
+  if (pathname === "/gaussian-train-stream") {
     wss.handleUpgrade(request, socket, head, (ws) => {
-      convertController.registerConvertSocket(ws);
+      gaussianController.registerSocket(ws);
     });
   } else if (pathname === "/prepare-frames-stream") {
       wss.handleUpgrade(request, socket, head, (ws) => {
