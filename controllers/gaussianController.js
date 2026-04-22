@@ -43,6 +43,16 @@ async function startTrain(req, res) {
   }
 }
 
+function stopTrain(req, res) {
+  const result = service.endTrain();
+
+  if (!result.success) 
+    return res.status(400).json(result);
+
+  broadcast("\n[Pedido para encerrar treinamento enviado]\n");
+  return res.status(200).json(result);
+}
+
 function registerSocket(ws) {
   clients.push(ws);
 
@@ -61,7 +71,7 @@ function broadcast(message) {
 
 async function checkColmapStructure(baseDir) {
   
-  const requiredDirs = ["distored", "images", "input", "sparse", "stereo"]
+  const requiredDirs = ["distorted", "images", "input", "sparse", "stereo"]
   const requiredFiles = [
     "run-colmap-geometric.sh",
     "run-colmap-photometric.sh",
@@ -112,5 +122,6 @@ async function checkColmapStructure(baseDir) {
 
 module.exports = {
   startTrain,
+  stopTrain,
   registerSocket,
 };
