@@ -99,14 +99,14 @@ function endTrain() {
         try {
           proc.kill("SIGKILL");
         } catch (err) {
-          console.error("Erro ao forçar parada do train.py:", err.message);
+          throw err
         }
       }
     }, 2000);
 
     return { success: true, message: "Processo de treinamento parado com sucesso"}
   } catch (err) {
-    return { success: false, message: `Erro inesperado ao tentar parar treinamento: ${err.message}`}
+    throw err
   }
 }
 

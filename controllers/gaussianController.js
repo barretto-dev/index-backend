@@ -6,6 +6,7 @@ let clients = [];
 let start_train_running = false;
 
 const FRAMES_DIR = "/development/frames";
+const GAUSSIAN_DIR = "/development/gaussian-splatting"
 
 async function startTrain(req, res) {
 
@@ -43,13 +44,36 @@ async function startTrain(req, res) {
   }
 }
 
-function stopTrain(req, res) {
-  const result = service.endTrain();
+async function stopTrain(req, res) {
 
-  if (!result.success) 
-    return res.status(400).json(result);
+  let result  = null
+  let newest_folder_name = null
 
-  broadcast("\n[Pedido para encerrar treinamento enviado]\n");
+  try {
+    result = service.endTrain();
+
+    //Deletar pasta do treinamento que foi encerrado
+    newest_folder_name = await getLastTrainningFolderName(GAUSSIAN_DIR)
+
+    if (!result.success) 
+      return res.status(500).json(result);
+
+    broadcast("\n[Pedido para encerrar treinamento enviado]\n");
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({message:"Erro ao encerrar treinamento"});
+  }
+ 
+  try {
+    const new_folder_dir = path.join(GAUSSIAN_DIR, "output", newest_folder_name);
+    await fsp.rm(new_folder_dir, { recursive: true, force: true })
+  } catch (error) {
+    console.log(error)
+    return res.status(400).json({
+      message: `Treinamento encerrado, mas sua pasta (${newest_folder_name}) não foi removida`
+    });
+  }
+  
   return res.status(200).json(result);
 }
 
@@ -118,6 +142,52 @@ async function checkColmapStructure(baseDir) {
     missingDirs,
     missingFiles,
   };
+}
+
+
+async function getLastTrainningFolderName(dirPath){
+  try {
+
+    const outputPath = dirPath+`/output`
+
+    // Verifica se pasta "output" existe,
+    // retornando null caso negativo
+    try {
+      await fsp.access(outputPath);
+    } catch {
+      console.log("Pasta output não encontrada")
+      return null
+    }
+
+    const items = await fsp.readdir(outputPath);
+
+    //Caso pasta "output" esteja vazia
+    if (!items.length){ 
+      console.log("Pasta output está vazia")
+      return null
+    }
+
+    const foldersWithStats = await Promise.all(
+      items.map(async (name) => {
+        const fullPath = path.join(outputPath, name)
+        const stat = await fsp.stat(fullPath)
+        return { name, time: stat.mtime }
+      })
+    );
+
+    // const validFolders = foldersWithStats.filter(Boolean);
+    // if (!validFolders.length) 
+    //   return null;
+
+    // Ordena pela data de modificação (mais recente primeiro)
+    foldersWithStats.sort((a, b) => b.time - a.time)
+
+    return foldersWithStats[0].name
+
+  } catch (err) {
+    console.log("Erro inesperado em getLastTrainningFolderName")
+    throw err
+  }
 }
 
 module.exports = {
