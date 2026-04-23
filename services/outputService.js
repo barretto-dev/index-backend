@@ -1,4 +1,5 @@
 const fs = require("fs");
+const fsp = require("fs").promises;
 const path = require("path");
 
 const OUTPUT_DIR = "/development/gaussian-splatting/output";
@@ -36,6 +37,22 @@ function listOutputFolders() {
   return folders;
 }
 
+async function deleteFolder(folderName) {
+  try {
+    const folder_dir = path.join(OUTPUT_DIR, folderName)
+
+    try { await fsp.access(folder_dir)} 
+    catch { return { success: false, message: `Pasta de treinamento ${folderName} não foi encontrada` }}
+
+    await fsp.rm(folder_dir, { recursive: true, force: true })
+    return { success: true, message: "Pasta de treinamento deletada com sucesso"}
+  } catch (error) {
+    console.log(error)
+    return { success: false, message: "Error inesperado ao deletar pasta de treinamento" }
+  }
+}
+
 module.exports = {
   listOutputFolders,
+  deleteFolder,
 };
