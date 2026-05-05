@@ -13,6 +13,7 @@ const FRAMES_DIR = "/development/frames/";
 let COLMAP_PROCESS = null;
 let RECORD_PROCESS = null;
 let RECORD_WS = null;
+let RECORD_WS_PAUSED = false;
 let RTMP_PREVIEW_PROCESS = null;
 let RTMP_PREVIEW_KEY = null;
 const RTMP_PREVIEW_CLIENTS = new Set();
@@ -233,6 +234,8 @@ function startRtmpPreview(rtmpUrl, fps, previewKey) {
 
   RTMP_PREVIEW_KEY = previewKey;
   RTMP_PREVIEW_PROCESS = spawn("ffmpeg", [
+    "-hide_banner",
+    "-loglevel", "error",
     "-fflags", "nobuffer",
     "-flags", "low_delay",
     "-probesize", "1000000",
@@ -255,13 +258,19 @@ function startRtmpPreview(rtmpUrl, fps, previewKey) {
   RTMP_PREVIEW_PROCESS.stdout.on("data", (data) => {
     RTMP_PREVIEW_CLIENTS.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
+        if (client.bufferedAmount > 2 * 1024 * 1024) {
+          return;
+        }
         client.send(data);
       }
     });
   });
 
   RTMP_PREVIEW_PROCESS.stderr.on("data", (data) => {
-    console.log(`[ffmpeg-rtmp-preview] ${data}`);
+    const message = data.toString().trim();
+    if (message) {
+      console.error(`[ffmpeg-rtmp-preview] ${message}`);
+    }
   });
 
   RTMP_PREVIEW_PROCESS.on("error", (err) => {
@@ -297,6 +306,31 @@ function stopRtmpPreview() {
   }
 }
 
+function pauseRecordWebSocket() {
+  if (!RECORD_WS || RECORD_WS_PAUSED || !RECORD_WS._socket) return;
+
+  RECORD_WS._socket.pause();
+  RECORD_WS_PAUSED = true;
+}
+
+function resumeRecordWebSocket() {
+  if (!RECORD_WS || !RECORD_WS_PAUSED || !RECORD_WS._socket || RECORD_WS.readyState !== WebSocket.OPEN) return;
+
+  RECORD_WS._socket.resume();
+  RECORD_WS_PAUSED = false;
+}
+
+function drainProcessStderr(process, prefix) {
+  if (!process || !process.stderr) return;
+
+  process.stderr.on("data", (data) => {
+    const message = data.toString().trim();
+    if (message) {
+      console.error(`[${prefix}] ${message}`);
+    }
+  });
+}
+
 async function startRecordWS(wsUrl, outputDir) {
   if (RECORD_PROCESS) {
     throw new Error("Já existe uma gravação via WebSocket em execução");
@@ -321,11 +355,24 @@ async function startRecordWS(wsUrl, outputDir) {
 
       // ffmpeg -i pipe:0 -vf fps=2 -q:v 2 frames/input/frame_%05d.jpg
       RECORD_PROCESS = spawn("ffmpeg", [
+        "-hide_banner",
+        "-loglevel", "error",
+        "-fflags", "nobuffer",
+        "-flags", "low_delay",
+        "-probesize", "1000000",
+        "-analyzeduration", "1000000",
         "-i", "pipe:0",
+        "-an",
         "-vf", "fps=2",
         "-q:v", "2",
         path.join(outputDir, "frame_%05d.jpg")
       ]);
+
+      drainProcessStderr(RECORD_PROCESS, "ffmpeg-record-ws");
+
+      RECORD_PROCESS.stdin.on("drain", () => {
+        resumeRecordWebSocket();
+      });
 
       RECORD_WS.on("open", () => {
         console.log(`Conectado ao WebSocket da câmera: ${wsUrl}`);
@@ -334,7 +381,10 @@ async function startRecordWS(wsUrl, outputDir) {
 
       RECORD_WS.on("message", (data) => {
         if (RECORD_PROCESS && RECORD_PROCESS.stdin.writable) {
-          RECORD_PROCESS.stdin.write(data);
+          const canContinue = RECORD_PROCESS.stdin.write(data);
+          if (!canContinue) {
+            pauseRecordWebSocket();
+          }
         }
       });
 
@@ -346,6 +396,15 @@ async function startRecordWS(wsUrl, outputDir) {
       RECORD_PROCESS.on("error", (err) => {
         console.error("Erro no processo FFmpeg de gravação:", err.message);
         stopRecordWS();
+      });
+
+      RECORD_PROCESS.on("close", () => {
+        RECORD_PROCESS = null;
+        if (RECORD_WS) {
+          RECORD_WS.close();
+          RECORD_WS = null;
+        }
+        RECORD_WS_PAUSED = false;
       });
 
       // Timeout para caso o WebSocket não conecte
@@ -384,15 +443,20 @@ async function startRecordRTMP(rtmpUrl, outputDir) {
   prepareRecordOutputDir(outputDir);
 
   RECORD_PROCESS = spawn("ffmpeg", [
+    "-hide_banner",
+    "-loglevel", "error",
+    "-fflags", "nobuffer",
+    "-flags", "low_delay",
+    "-probesize", "1000000",
+    "-analyzeduration", "1000000",
     "-i", rtmpUrl,
+    "-an",
     "-vf", "fps=2",
     "-q:v", "2",
     path.join(outputDir, "frame_%05d.jpg")
   ]);
 
-  RECORD_PROCESS.stderr.on("data", (data) => {
-    console.log(`[ffmpeg-rtmp] ${data}`);
-  });
+  drainProcessStderr(RECORD_PROCESS, "ffmpeg-rtmp");
 
   RECORD_PROCESS.on("error", (err) => {
     console.error("Erro no processo FFmpeg RTMP:", err.message);
@@ -411,6 +475,7 @@ function stopRecordWS() {
     RECORD_WS.close();
     RECORD_WS = null;
   }
+  RECORD_WS_PAUSED = false;
 
   if (RECORD_PROCESS) {
     const proc = RECORD_PROCESS;
