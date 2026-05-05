@@ -2,6 +2,7 @@ const axios = require("axios");
 const fs = require("fs");
 const fsp = require('fs').promises;
 const path = require("path");
+const url = require("url");
 const unzipper = require("unzipper");
 const service = require("../services/imageService");
 
@@ -157,6 +158,24 @@ function broadcast(message) {
   });
 }
 
+function registerRtmpPreviewSocket(ws, req) {
+  const { query } = url.parse(req.url, true);
+  const rtmpUrl = query.url;
+  const fps = Number(query.fps || 60);
+
+  if (!rtmpUrl || (!rtmpUrl.startsWith("rtmp://") && !rtmpUrl.startsWith("rtmps://"))) {
+    ws.close(1008, "URL RTMP inválida");
+    return;
+  }
+
+  if (!Number.isFinite(fps) || fps < 1 || fps > 120) {
+    ws.close(1008, "FPS RTMP inválido");
+    return;
+  }
+
+  service.addRtmpPreviewClient(ws, rtmpUrl, fps);
+}
+
 async function startRecordWS(req, res) {
   try {
     const { wsUrl } = req.body;
@@ -188,12 +207,45 @@ function stopRecordWS(req, res) {
   }
 }
 
+async function startRecordRTMP(req, res) {
+  try {
+    const { rtmpUrl } = req.body;
+    if (!rtmpUrl) {
+      return res.status(400).json({ message: "rtmpUrl é obrigatório" });
+    }
+
+    if (!rtmpUrl.startsWith("rtmp://") && !rtmpUrl.startsWith("rtmps://")) {
+      return res.status(400).json({ message: "rtmpUrl deve começar com rtmp:// ou rtmps://" });
+    }
+
+    const outputDir = path.join(FRAMES_DIR, "input");
+    const result = await service.startRecordRTMP(rtmpUrl, outputDir);
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("Erro ao iniciar gravação RTMP:", err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+function stopRecordRTMP(req, res) {
+  try {
+    const result = service.stopRecordRTMP();
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("Erro ao parar gravação RTMP:", err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
 module.exports = {
   downloadImagesZip,
   downloadAndSave,
   startPrepareFrames,
   stopPrepareFrames,
   registerSocket,
+  registerRtmpPreviewSocket,
   startRecordWS,
   stopRecordWS,
+  startRecordRTMP,
+  stopRecordRTMP,
 };
