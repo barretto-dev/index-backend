@@ -349,6 +349,7 @@ async function startRecordWS(wsUrl, outputDir) {
   }
 
   return new Promise((resolve, reject) => {
+    let settled = false;
 
     try {
       RECORD_WS = new WebSocket(wsUrl);
@@ -376,6 +377,7 @@ async function startRecordWS(wsUrl, outputDir) {
 
       RECORD_WS.on("open", () => {
         console.log(`Conectado ao WebSocket da câmera: ${wsUrl}`);
+        settled = true;
         resolve({ success: true, message: "Gravação via WebSocket iniciada" });
       });
 
@@ -391,11 +393,19 @@ async function startRecordWS(wsUrl, outputDir) {
       RECORD_WS.on("error", (err) => {
         console.error("Erro no WebSocket de gravação:", err.message);
         stopRecordWS();
+        if (!settled) {
+          settled = true;
+          reject(new Error(`Falha ao conectar ao WebSocket da câmera ${wsUrl}: ${err.message}`));
+        }
       });
 
       RECORD_PROCESS.on("error", (err) => {
         console.error("Erro no processo FFmpeg de gravação:", err.message);
         stopRecordWS();
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
       });
 
       RECORD_PROCESS.on("close", () => {
@@ -409,14 +419,16 @@ async function startRecordWS(wsUrl, outputDir) {
 
       // Timeout para caso o WebSocket não conecte
       setTimeout(() => {
-        if (RECORD_WS && RECORD_WS.readyState !== WebSocket.OPEN) {
+        if (!settled && RECORD_WS && RECORD_WS.readyState !== WebSocket.OPEN) {
           stopRecordWS();
+          settled = true;
           reject(new Error("Timeout ao conectar ao WebSocket da câmera"));
         }
       }, 5000);
 
     } catch (err) {
       stopRecordWS();
+      settled = true;
       reject(err);
     }
   });

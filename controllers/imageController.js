@@ -11,6 +11,23 @@ const FRAMES_DIR = "/development/frames";
 let clients = [];
 let prepare_frames_running = false;
 
+function requestHost(req) {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost || req.headers.host || "";
+  return host.split(",")[0].trim().split(":")[0];
+}
+
+function normalizeWebSocketUrlForServer(wsUrl, req) {
+  const parsed = new URL(wsUrl);
+  if (["127.0.0.1", "localhost", "0.0.0.0"].includes(parsed.hostname)) {
+    const host = requestHost(req);
+    if (host && !["127.0.0.1", "localhost", "0.0.0.0"].includes(host)) {
+      parsed.hostname = host;
+    }
+  }
+  return parsed.toString();
+}
+
 function downloadImagesZip(req, res) {
   try {
     service.streamImagesZip(res);
@@ -184,12 +201,14 @@ async function startRecordWS(req, res) {
     }
 
     const outputDir = path.join(FRAMES_DIR, "input");
+    const normalizedWsUrl = normalizeWebSocketUrlForServer(wsUrl, req);
+    console.log(`Iniciando gravação WS: ${normalizedWsUrl}`);
     
     // Garantir que a pasta esteja limpa para uma nova gravação? 
     // O usuário pode querer acumular, mas geralmente para Colmap queremos uma sessão limpa.
     // Para simplificar, vamos apenas iniciar.
     
-    const result = await service.startRecordWS(wsUrl, outputDir);
+    const result = await service.startRecordWS(normalizedWsUrl, outputDir);
     return res.status(200).json(result);
   } catch (err) {
     console.error("Erro ao iniciar gravação WS:", err.message);
