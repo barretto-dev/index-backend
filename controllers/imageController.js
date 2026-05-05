@@ -157,43 +157,10 @@ function broadcast(message) {
   });
 }
 
-async function startRecordWS(req, res) {
-  try {
-    const { wsUrl } = req.body;
-    if (!wsUrl) {
-      return res.status(400).json({ message: "wsUrl é obrigatório" });
-    }
-
-    const outputDir = path.join(FRAMES_DIR, "input");
-    
-    // Garantir que a pasta esteja limpa para uma nova gravação? 
-    // O usuário pode querer acumular, mas geralmente para Colmap queremos uma sessão limpa.
-    // Para simplificar, vamos apenas iniciar.
-    
-    const result = await service.startRecordWS(wsUrl, outputDir);
-    return res.status(200).json(result);
-  } catch (err) {
-    console.error("Erro ao iniciar gravação WS:", err.message);
-    return res.status(500).json({ message: err.message });
-  }
-}
-
-function stopRecordWS(req, res) {
-  try {
-    const result = service.stopRecordWS();
-    return res.status(200).json(result);
-  } catch (err) {
-    console.error("Erro ao parar gravação WS:", err.message);
-    return res.status(500).json({ message: err.message });
-  }
-}
-
 module.exports = {
   downloadImagesZip,
   downloadAndSave,
   startPrepareFrames,
   stopPrepareFrames,
   registerSocket,
-  startRecordWS,
-  stopRecordWS,
 };

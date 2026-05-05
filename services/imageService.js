@@ -5,15 +5,10 @@ const unzipper = require("unzipper");
 const path = require("path");
 const archiver = require("archiver");
 const { spawn } = require("child_process");
-const WebSocket = require("ws");
-
 
 const IMAGES_DIR = "/development/camera_data/images";
 const FRAMES_DIR = "/development/frames/";
 let COLMAP_PROCESS = null;
-let RECORD_PROCESS = null;
-let RECORD_WS = null;
-
 
 function streamImagesZip(res) {
   if (!fs.existsSync(IMAGES_DIR)) {
@@ -203,108 +198,9 @@ function stopColmap() {
     return { success: false, message: `Erro ao encerrar processo: ${err.message}`}
   }
 }
-
-async function startRecordWS(wsUrl, outputDir) {
-  if (RECORD_PROCESS) {
-    throw new Error("Já existe uma gravação via WebSocket em execução");
-  }
-
-  // Limpar a pasta frames antes de começar (conforme solicitado pelo usuário)
-  try {
-    const parentDir = path.dirname(outputDir); // /development/frames
-    if (fs.existsSync(parentDir)) {
-      console.log(`Limpando diretório de frames: ${parentDir}`);
-      fs.rmSync(parentDir, { recursive: true, force: true });
-    }
-    fs.mkdirSync(outputDir, { recursive: true });
-  } catch (err) {
-    console.error("Erro ao limpar/criar pastas de frames:", err.message);
-  }
-
-  return new Promise((resolve, reject) => {
-
-    try {
-      RECORD_WS = new WebSocket(wsUrl);
-
-      // ffmpeg -i pipe:0 -vf fps=2 -q:v 2 frames/input/frame_%05d.jpg
-      RECORD_PROCESS = spawn("ffmpeg", [
-        "-i", "pipe:0",
-        "-vf", "fps=2",
-        "-q:v", "2",
-        path.join(outputDir, "frame_%05d.jpg")
-      ]);
-
-      RECORD_WS.on("open", () => {
-        console.log(`Conectado ao WebSocket da câmera: ${wsUrl}`);
-        resolve({ success: true, message: "Gravação via WebSocket iniciada" });
-      });
-
-      RECORD_WS.on("message", (data) => {
-        if (RECORD_PROCESS && RECORD_PROCESS.stdin.writable) {
-          RECORD_PROCESS.stdin.write(data);
-        }
-      });
-
-      RECORD_WS.on("error", (err) => {
-        console.error("Erro no WebSocket de gravação:", err.message);
-        stopRecordWS();
-      });
-
-      RECORD_PROCESS.on("error", (err) => {
-        console.error("Erro no processo FFmpeg de gravação:", err.message);
-        stopRecordWS();
-      });
-
-      // Timeout para caso o WebSocket não conecte
-      setTimeout(() => {
-        if (RECORD_WS && RECORD_WS.readyState !== WebSocket.OPEN) {
-          stopRecordWS();
-          reject(new Error("Timeout ao conectar ao WebSocket da câmera"));
-        }
-      }, 5000);
-
-    } catch (err) {
-      stopRecordWS();
-      reject(err);
-    }
-  });
-}
-
-function stopRecordWS() {
-  if (RECORD_WS) {
-    RECORD_WS.close();
-    RECORD_WS = null;
-  }
-
-  if (RECORD_PROCESS) {
-    const proc = RECORD_PROCESS;
-    try {
-      proc.stdin.end();
-      proc.kill("SIGTERM");
-      
-      setTimeout(() => {
-        try {
-          if (proc.exitCode === null) {
-            proc.kill("SIGKILL");
-          }
-        } catch (err) {}
-      }, 2000);
-
-    } catch (err) {
-      console.error("Erro ao encerrar FFmpeg:", err.message);
-    }
-    RECORD_PROCESS = null;
-  }
-
-
-  return { success: true, message: "Gravação via WebSocket encerrada" };
-}
-
 module.exports = {
   streamImagesZip,
   downloadAndSave,
   runColmap,
   stopColmap,
-  startRecordWS,
-  stopRecordWS,
 };
