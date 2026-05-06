@@ -61,59 +61,59 @@ function streamImagesZip(res) {
   return archive.finalize();
 }
 
-async function downloadAndSave(apiUrl, zipPath, extractPath){
+async function downloadAndSave(apiUrl, zipPath, extractPath) {
 
-      //Limpando diteorio de extração do zip
-      await fsp.rm(extractPath, { recursive: true, force: true })
+  //Limpando diteorio de extração do zip
+  await fsp.rm(extractPath, { recursive: true, force: true })
 
-      //Criando diretorio de extração caso não exista
-      fs.mkdirSync(extractPath, { recursive: true });
+  //Criando diretorio de extração caso não exista
+  fs.mkdirSync(extractPath, { recursive: true });
 
-      var response = null
+  var response = null
 
-      try {
-        response = await axios({
-          method: "GET",
-          url: apiUrl,
-          responseType: "stream",
-        });
-      } catch (error) {
-        console.log(error.message)
-        throw new Error(`Não foi possível adquirir arquivo .zip`);
-      }
-
-      // Retorna uma Promise que será resolvida ou rejeitada baseada nos eventos
-      return new Promise((resolve, reject) => {
-        const writer = fs.createWriteStream(zipPath);
-        response.data.pipe(writer);
-
-        writer.on("finish", async () => {
-          try {
-            await fs
-              .createReadStream(zipPath)
-              .pipe(unzipper.Extract({ path: extractPath }))
-              .promise();
-
-            console.log(`ZIP salvo em: ${zipPath}`);
-            console.log(`Arquivos extraídos em: ${extractPath}`);
-            
-            fs.unlinkSync(zipPath);
-            
-            console.log(`Arquivo salvo em ${zipPath} e extraído em ${extractPath}`)
-            resolve({ message: `Download e extração do zip feita com sucesso`});
-
-          } catch (err) {
-            console.error("Erro ao extrair ZIP:", err);
-            reject(new Error("ZIP baixado, mas houve erro ao extrair"));
-          }
-        });
-
-        writer.on("error", (err) => {
-          console.error("Erro ao salvar ZIP:", err);
-          reject(new Error("Erro ao salvar arquivo ZIP"));
-        });
-      });
+  try {
+    response = await axios({
+      method: "GET",
+      url: apiUrl,
+      responseType: "stream",
+    });
+  } catch (error) {
+    console.log(error.message)
+    throw new Error(`Não foi possível adquirir arquivo .zip`);
   }
+
+  // Retorna uma Promise que será resolvida ou rejeitada baseada nos eventos
+  return new Promise((resolve, reject) => {
+    const writer = fs.createWriteStream(zipPath);
+    response.data.pipe(writer);
+
+    writer.on("finish", async () => {
+      try {
+        await fs
+          .createReadStream(zipPath)
+          .pipe(unzipper.Extract({ path: extractPath }))
+          .promise();
+
+        console.log(`ZIP salvo em: ${zipPath}`);
+        console.log(`Arquivos extraídos em: ${extractPath}`);
+
+        fs.unlinkSync(zipPath);
+
+        console.log(`Arquivo salvo em ${zipPath} e extraído em ${extractPath}`)
+        resolve({ message: `Download e extração do zip feita com sucesso` });
+
+      } catch (err) {
+        console.error("Erro ao extrair ZIP:", err);
+        reject(new Error("ZIP baixado, mas houve erro ao extrair"));
+      }
+    });
+
+    writer.on("error", (err) => {
+      console.error("Erro ao salvar ZIP:", err);
+      reject(new Error("Erro ao salvar arquivo ZIP"));
+    });
+  });
+}
 
 function runColmap(onOutput) {
   return new Promise((resolve, reject) => {
@@ -124,7 +124,7 @@ function runColmap(onOutput) {
 
     const child = spawn(
       "python3",
-      ["convert.py", "-s", FRAMES_DIR],
+      ["convert.py", "-s", FRAMES_DIR, "--no_gpu"],
       {
         cwd: "/development/gaussian-splatting/",
         env: { ...process.env },
@@ -170,7 +170,7 @@ function runColmap(onOutput) {
         onOutput?.(`\n[processo encerrado por sinal ${signal}]\n`);
       else
         onOutput?.(`\n[processo finalizado com código ${code}]\n`);
-      
+
       resolve({
         success: code === 0,
         exitCode: code,
@@ -184,8 +184,8 @@ function runColmap(onOutput) {
 
 function stopColmap() {
 
-  if (!COLMAP_PROCESS) 
-    return {success: false, message: "Não há processo runColmap em execução"};
+  if (!COLMAP_PROCESS)
+    return { success: false, message: "Não há processo runColmap em execução" };
 
   const proc = COLMAP_PROCESS;
 
@@ -202,9 +202,9 @@ function stopColmap() {
       }
     }, 2000);
 
-    return { success: true, message: "Comando de parada enviado"}
+    return { success: true, message: "Comando de parada enviado" }
   } catch (err) {
-    return { success: false, message: `Erro ao encerrar processo: ${err.message}`}
+    return { success: false, message: `Erro ao encerrar processo: ${err.message}` }
   }
 }
 
@@ -299,7 +299,7 @@ function stopRtmpPreview() {
         if (proc.exitCode === null) {
           proc.kill("SIGKILL");
         }
-      } catch (err) {}
+      } catch (err) { }
     }, 2000);
   } catch (err) {
     console.error("Erro ao encerrar preview RTMP:", err.message);
@@ -354,7 +354,7 @@ async function startRecordWS(wsUrl, outputDir) {
     try {
       RECORD_WS = new WebSocket(wsUrl);
 
-      // ffmpeg -i pipe:0 -vf fps=2 -q:v 2 frames/input/frame_%05d.jpg
+      // Use PNG frames in live_stream mode to avoid lossy JPEG recompression.
       RECORD_PROCESS = spawn("ffmpeg", [
         "-hide_banner",
         "-loglevel", "error",
@@ -365,8 +365,8 @@ async function startRecordWS(wsUrl, outputDir) {
         "-i", "pipe:0",
         "-an",
         "-vf", "fps=2",
-        "-q:v", "2",
-        path.join(outputDir, "frame_%05d.jpg")
+        "-compression_level", "0",
+        path.join(outputDir, "frame_%05d.png")
       ]);
 
       drainProcessStderr(RECORD_PROCESS, "ffmpeg-record-ws");
@@ -494,13 +494,13 @@ function stopRecordWS() {
     try {
       proc.stdin.end();
       proc.kill("SIGTERM");
-      
+
       setTimeout(() => {
         try {
           if (proc.exitCode === null) {
             proc.kill("SIGKILL");
           }
-        } catch (err) {}
+        } catch (err) { }
       }, 2000);
 
     } catch (err) {
@@ -524,7 +524,7 @@ function stopRecordRTMP() {
           if (proc.exitCode === null) {
             proc.kill("SIGKILL");
           }
-        } catch (err) {}
+        } catch (err) { }
       }, 2000);
 
     } catch (err) {
