@@ -124,7 +124,7 @@ function runColmap(onOutput) {
 
     const child = spawn(
       "python3",
-      ["convert.py", "-s", FRAMES_DIR, "--no_gpu"],
+      ["convert.py", "-s", FRAMES_DIR],
       {
         cwd: "/development/gaussian-splatting/",
         env: { ...process.env },
@@ -364,7 +364,7 @@ async function startRecordWS(wsUrl, outputDir) {
         "-analyzeduration", "1000000",
         "-i", "pipe:0",
         "-an",
-        "-vf", "fps=5",
+        "-vf", "fps=4",
         "-compression_level", "0",
         path.join(outputDir, "frame_%05d.png")
       ]);
