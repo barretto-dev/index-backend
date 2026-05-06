@@ -364,7 +364,7 @@ async function startRecordWS(wsUrl, outputDir) {
         "-analyzeduration", "1000000",
         "-i", "pipe:0",
         "-an",
-        "-vf", "fps=2",
+        "-vf", "fps=5",
         "-compression_level", "0",
         path.join(outputDir, "frame_%05d.png")
       ]);
