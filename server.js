@@ -37,6 +37,10 @@ server.on("upgrade", (request, socket, head) => {
       wss.handleUpgrade(request, socket, head, (ws) => {
         imageController.registerSocket(ws);
       });
+  } else if (pathname === "/rtmp-preview") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        imageController.registerRtmpPreviewSocket(ws, request);
+      });
   } else {
     socket.destroy();
   }

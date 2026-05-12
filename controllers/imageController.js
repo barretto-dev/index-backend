@@ -2,6 +2,7 @@ const axios = require("axios");
 const fs = require("fs");
 const fsp = require('fs').promises;
 const path = require("path");
+const url = require("url");
 const unzipper = require("unzipper");
 const service = require("../services/imageService");
 
@@ -9,6 +10,23 @@ const FRAMES_DIR = "/development/frames";
 
 let clients = [];
 let prepare_frames_running = false;
+
+function requestHost(req) {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost || req.headers.host || "";
+  return host.split(",")[0].trim().split(":")[0];
+}
+
+function normalizeWebSocketUrlForServer(wsUrl, req) {
+  const parsed = new URL(wsUrl);
+  if (["127.0.0.1", "localhost", "0.0.0.0"].includes(parsed.hostname)) {
+    const host = requestHost(req);
+    if (host && !["127.0.0.1", "localhost", "0.0.0.0"].includes(host)) {
+      parsed.hostname = host;
+    }
+  }
+  return parsed.toString();
+}
 
 function downloadImagesZip(req, res) {
   try {
@@ -157,10 +175,96 @@ function broadcast(message) {
   });
 }
 
+function registerRtmpPreviewSocket(ws, req) {
+  const { query } = url.parse(req.url, true);
+  const rtmpUrl = query.url;
+  const fps = Number(query.fps || 60);
+
+  if (!rtmpUrl || (!rtmpUrl.startsWith("rtmp://") && !rtmpUrl.startsWith("rtmps://"))) {
+    ws.close(1008, "URL RTMP inválida");
+    return;
+  }
+
+  if (!Number.isFinite(fps) || fps < 1 || fps > 120) {
+    ws.close(1008, "FPS RTMP inválido");
+    return;
+  }
+
+  service.addRtmpPreviewClient(ws, rtmpUrl, fps);
+}
+
+async function startRecordWS(req, res) {
+  try {
+    const { wsUrl } = req.body;
+    if (!wsUrl) {
+      return res.status(400).json({ message: "wsUrl é obrigatório" });
+    }
+
+    const outputDir = path.join(FRAMES_DIR, "input");
+    const normalizedWsUrl = normalizeWebSocketUrlForServer(wsUrl, req);
+    console.log(`Iniciando gravação WS: ${normalizedWsUrl}`);
+    
+    // Garantir que a pasta esteja limpa para uma nova gravação? 
+    // O usuário pode querer acumular, mas geralmente para Colmap queremos uma sessão limpa.
+    // Para simplificar, vamos apenas iniciar.
+    
+    const result = await service.startRecordWS(normalizedWsUrl, outputDir);
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("Erro ao iniciar gravação WS:", err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+function stopRecordWS(req, res) {
+  try {
+    const result = service.stopRecordWS();
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("Erro ao parar gravação WS:", err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+async function startRecordRTMP(req, res) {
+  try {
+    const { rtmpUrl } = req.body;
+    if (!rtmpUrl) {
+      return res.status(400).json({ message: "rtmpUrl é obrigatório" });
+    }
+
+    if (!rtmpUrl.startsWith("rtmp://") && !rtmpUrl.startsWith("rtmps://")) {
+      return res.status(400).json({ message: "rtmpUrl deve começar com rtmp:// ou rtmps://" });
+    }
+
+    const outputDir = path.join(FRAMES_DIR, "input");
+    const result = await service.startRecordRTMP(rtmpUrl, outputDir);
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("Erro ao iniciar gravação RTMP:", err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+function stopRecordRTMP(req, res) {
+  try {
+    const result = service.stopRecordRTMP();
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("Erro ao parar gravação RTMP:", err.message);
+    return res.status(500).json({ message: err.message });
+  }
+}
+
 module.exports = {
   downloadImagesZip,
   downloadAndSave,
   startPrepareFrames,
   stopPrepareFrames,
   registerSocket,
+  registerRtmpPreviewSocket,
+  startRecordWS,
+  stopRecordWS,
+  startRecordRTMP,
+  stopRecordRTMP,
 };
