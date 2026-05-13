@@ -9,6 +9,7 @@ const sibrRoutes = require("./routes/sibrRoutes");
 const imageRoutes = require("./routes/imageRoutes");
 const gaussianRoutes = require("./routes/gaussianRoutes");
 const outputRoutes = require("./routes/outputRoutes");
+const pointCloudController = require("./routes/pointCloudRoutes")
 
 const imageController = require("./controllers/imageController")
 const gaussianController = require("./controllers/gaussianController");
@@ -23,6 +24,7 @@ app.use("/sibr", sibrRoutes);
 app.use("/images", imageRoutes);
 app.use("/gaussian", gaussianRoutes);
 app.use("/output", outputRoutes);
+app.use("/pointCloud", pointCloudController);
 
 const wss = new WebSocket.Server({ noServer: true });
 
