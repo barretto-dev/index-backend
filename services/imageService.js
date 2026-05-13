@@ -124,7 +124,7 @@ function runColmap(onOutput) {
 
     const child = spawn(
       "python3",
-      ["convert.py", "-s", FRAMES_DIR],
+      ["convert.py", "-s", FRAMES_DIR, "--no_gpu"],
       {
         cwd: "/development/gaussian-splatting/",
         env: { ...process.env },
