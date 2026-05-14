@@ -8,7 +8,7 @@ async function generationStart(req, res){
     const result = pointCloudService.run3DReconDeep(wsUrl, wsPort)
 
     if (!result.success) 
-      return res.status(500).json({message: "Geração de pointcloud encerrado com erro"});
+      return res.status(500).json({message: "Geração de pointcloud ja foi iniciada"});
 
     return res.status(200).json({message: "Geração de pointCloud iniciado com sucesso"});
    } catch (error) {
@@ -28,7 +28,7 @@ async function generationStop(req, res){
     const result = pointCloudService.stop3DReconDeep()
 
      if (!result.success) 
-      return res.status(500).json({message: "Geração de pointcloud encerrado com erro"});
+      return res.status(500).json({message: "Geração de pointcloud já foi encerrada"});
      
      return res.status(200).json({message: "Geração de pointCloud encerrado com sucesso"});
    } catch (error) {
